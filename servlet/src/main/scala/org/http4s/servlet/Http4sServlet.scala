@@ -23,6 +23,7 @@ import scalaz.{\/, -\/, \/-}
 import scala.util.control.NonFatal
 import org.parboiled2.ParseError
 import org.log4s.getLogger
+import util.CaseInsensitiveString._
 
 class Http4sServlet(service: HttpService, 
                     asyncTimeout: Duration = Duration.Inf, 
@@ -167,9 +168,16 @@ class Http4sServlet(service: HttpService,
 
   private def renderServletResponseHead(servletResponse: HttpServletResponse, response: Response): Unit = {
     servletResponse.setStatus(response.status.code, response.status.reason)
-    for (header <- response.headers)
-      if (header.isNot(Header.`Transfer-Encoding`)) // TODO: Tomcat is rendering this twice and then not closing
+    for (header <- response.headers) {
+      /*
+       * Tomcat renders `Transfer-Encoding: Chunked` in the absence of Content-Length and Close,
+       * even if we explicitly set it.  In either Tomcat or Jetty, if we ignore it, the container
+       * manages it correctly.
+       */
+      if (header.name != "Transfer-Encoding".ci) {
         servletResponse.addHeader(header.name.toString, header.value)
+      }
+    }
   }
 
   private def syncBodyReader(servletRequest: HttpServletRequest): EntityBody =
